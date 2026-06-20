@@ -1,0 +1,23 @@
+# ──────────────────────────────────────────────────────────────────────────
+#  Render Blueprint — Native Python Runtime (no Docker)
+#  Docs: https://docs.render.com/blueprint-spec
+# ──────────────────────────────────────────────────────────────────────────
+
+services:
+  - type: web
+    name: market-regime-detector
+    runtime: python
+    region: oregon
+    plan: free                        # or "starter" for always-on
+    buildCommand: pip install -r requirements-deploy.txt
+    startCommand: python run_api.py
+    healthCheckPath: /health
+    envVars:
+      - key: BINANCE_API_URL
+        value: https://api.binance.com
+      - key: MODEL_PATH
+        value: models
+      - key: PYTHON_ENV
+        value: production
+      - key: PYTHON_VERSION
+        value: "3.11.9"

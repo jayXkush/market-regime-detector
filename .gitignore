@@ -1,0 +1,29 @@
+# ── Python ────────────────────────────────────────────────────────────────
+venv/
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+dist/
+build/
+
+# ── Environment ───────────────────────────────────────────────────────────
+.env
+
+# ── Data & logs (training artifacts — not needed for deployment) ──────────
+data/
+logs/
+reports/
+notebooks/
+
+# ── Dashboard (separate deployment if needed) ─────────────────────────────
+dashboard/node_modules/
+
+# ── IDE ───────────────────────────────────────────────────────────────────
+.vscode/
+.idea/
+
+# ── OS ────────────────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db

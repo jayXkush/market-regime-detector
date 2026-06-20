@@ -1,0 +1,120 @@
+/* ═══════════════════════════════════════════════════════════
+   Global Reset & Design Tokens
+   ═══════════════════════════════════════════════════════════ */
+
+:root {
+  /* ── Color Palette ────────────────────────────────────── */
+  --bg-primary: #0a0e1a;
+  --bg-secondary: #111827;
+  --bg-card: #1a2035;
+  --bg-card-hover: #1f2847;
+  --bg-glass: rgba(26, 32, 53, 0.7);
+
+  --text-primary: #f1f5f9;
+  --text-secondary: #94a3b8;
+  --text-muted: #64748b;
+
+  --accent-cyan: #06b6d4;
+  --accent-cyan-dim: rgba(6, 182, 212, 0.15);
+  --accent-violet: #8b5cf6;
+  --accent-violet-dim: rgba(139, 92, 246, 0.15);
+  --accent-emerald: #10b981;
+  --accent-emerald-dim: rgba(16, 185, 129, 0.15);
+  --accent-amber: #f59e0b;
+  --accent-amber-dim: rgba(245, 158, 11, 0.15);
+  --accent-rose: #f43f5e;
+  --accent-rose-dim: rgba(244, 63, 94, 0.15);
+  --accent-sky: #38bdf8;
+
+  --border-color: rgba(148, 163, 184, 0.1);
+  --border-glow: rgba(6, 182, 212, 0.3);
+
+  /* ── Regime Colors ────────────────────────────────────── */
+  --regime-high-vol: #f43f5e;
+  --regime-low-vol: #06b6d4;
+  --regime-trending-up: #10b981;
+  --regime-trending-down: #ef4444;
+  --regime-mean-reverting: #f59e0b;
+  --regime-transitional: #8b5cf6;
+  --regime-noise: #64748b;
+  --regime-unknown: #475569;
+
+  /* ── Spacing ──────────────────────────────────────────── */
+  --space-xs: 0.25rem;
+  --space-sm: 0.5rem;
+  --space-md: 1rem;
+  --space-lg: 1.5rem;
+  --space-xl: 2rem;
+  --space-2xl: 3rem;
+
+  /* ── Border Radius ────────────────────────────────────── */
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --radius-xl: 20px;
+
+  /* ── Typography ───────────────────────────────────────── */
+  --font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --font-xs: 0.75rem;
+  --font-sm: 0.8125rem;
+  --font-base: 0.9375rem;
+  --font-lg: 1.125rem;
+  --font-xl: 1.5rem;
+  --font-2xl: 2rem;
+  --font-3xl: 2.5rem;
+
+  /* ── Shadows ──────────────────────────────────────────── */
+  --shadow-card: 0 4px 24px rgba(0, 0, 0, 0.3), 0 0 0 1px var(--border-color);
+  --shadow-card-hover: 0 8px 32px rgba(0, 0, 0, 0.4), 0 0 0 1px var(--border-glow);
+  --shadow-glow-cyan: 0 0 20px rgba(6, 182, 212, 0.15);
+  --shadow-glow-violet: 0 0 20px rgba(139, 92, 246, 0.15);
+
+  /* ── Transitions ──────────────────────────────────────── */
+  --transition-fast: 150ms ease;
+  --transition-base: 250ms ease;
+  --transition-slow: 400ms ease;
+}
+
+/* ═══════════════════════════════════════════════════════════
+   Reset
+   ═══════════════════════════════════════════════════════════ */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html {
+  font-size: 16px;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+body {
+  font-family: var(--font-family);
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  line-height: 1.6;
+  min-height: 100vh;
+  overflow-x: hidden;
+}
+
+/* Subtle animated gradient background */
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background:
+    radial-gradient(ellipse 80% 50% at 20% 20%, rgba(6, 182, 212, 0.06), transparent),
+    radial-gradient(ellipse 60% 40% at 80% 80%, rgba(139, 92, 246, 0.05), transparent);
+  pointer-events: none;
+  z-index: 0;
+}
+
+#root {
+  position: relative;
+  z-index: 1;
+}
