@@ -117,8 +117,12 @@ app = FastAPI(
 # ── CORS — allow the dashboard frontend to call this API ──────────────────
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],          # tighten to your dashboard URL in production
-    allow_credentials=True,
+    allow_origins=[
+        "https://market-regime-dashboard.onrender.com",
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+    ],
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
