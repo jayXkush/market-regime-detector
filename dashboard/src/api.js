@@ -1,10 +1,11 @@
 /**
  * API service — fetches data from the Phase 5 FastAPI backend.
  *
- * All calls go through the Vite dev proxy (/api → http://127.0.0.1:10000).
+ * In development: Vite proxy rewrites /api → http://127.0.0.1:10000
+ * In production:  calls the Render backend URL directly via VITE_API_URL
  */
 
-const BASE = '/api';
+const BASE = import.meta.env.VITE_API_URL || '/api';
 
 /**
  * GET /health

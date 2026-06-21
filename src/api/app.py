@@ -19,6 +19,7 @@ from datetime import datetime, timezone
 from typing import Optional
 
 from fastapi import FastAPI, HTTPException, Query
+from fastapi.middleware.cors import CORSMiddleware
 
 from src.api.schemas import (
     ErrorResponse,
@@ -113,6 +114,14 @@ app = FastAPI(
     },
 )
 
+# ── CORS — allow the dashboard frontend to call this API ──────────────────
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],          # tighten to your dashboard URL in production
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 # ═══════════════════════════════════════════════════════════════════════════
 #  Endpoints
