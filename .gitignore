@@ -12,7 +12,7 @@ build/
 .env
 
 # ── Data & logs (training artifacts — not needed for deployment) ──────────
-data/
+/data/
 logs/
 reports/
 notebooks/
