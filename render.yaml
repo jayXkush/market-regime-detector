@@ -8,7 +8,7 @@ services:
   - type: web
     name: market-regime-detector
     runtime: python
-    region: oregon
+    region: singapore
     plan: free
     buildCommand: pip install -r requirements-deploy.txt
     startCommand: python run_api.py
@@ -27,7 +27,7 @@ services:
   - type: web
     name: market-regime-dashboard
     runtime: static
-    region: oregon
+    region: singapore
     plan: free
     rootDir: dashboard
     buildCommand: npm install && npm run build
