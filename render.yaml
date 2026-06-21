@@ -1,5 +1,5 @@
 # ──────────────────────────────────────────────────────────────────────────
-#  Render Blueprint — Backend API + Frontend Dashboard
+#  Render Blueprint — Backend API (Python)
 #  Docs: https://docs.render.com/blueprint-spec
 # ──────────────────────────────────────────────────────────────────────────
 
@@ -22,23 +22,3 @@ services:
         value: production
       - key: PYTHON_VERSION
         value: "3.11.9"
-
-  # ── Frontend: React Dashboard (Vite static site) ─────────────────────
-  - type: web
-    name: market-regime-dashboard
-    runtime: static
-    plan: free
-    rootDir: dashboard
-    buildCommand: npm install && npm run build
-    staticPublishPath: dist
-    headers:
-      - path: /*
-        name: Cache-Control
-        value: public, max-age=0, must-revalidate
-    routes:
-      - type: rewrite
-        source: /*
-        destination: /index.html
-    envVars:
-      - key: VITE_API_URL
-        value: https://market-regime-detector.onrender.com

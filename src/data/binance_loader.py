@@ -6,6 +6,9 @@ Fetches three types of market data for configured trading pairs:
     • Trades  — recent aggregate trades
     • Orderbook — order book depth snapshot
 
+Includes automatic fallback: if api.binance.com is geo-blocked (HTTP 451),
+the loader switches to data-api.binance.vision for market data.
+
 All data is returned as normalised pandas DataFrames ready for
 downstream feature engineering (Phase 2).
 
@@ -33,7 +36,18 @@ logger = get_logger(__name__)
 
 # ── Defaults ──────────────────────────────────────────────────────────────
 DEFAULT_SYMBOLS = ["BTCUSDT", "ETHUSDT"]
-BASE_URL = os.environ.get("BINANCE_API_URL", "https://api.binance.com")
+
+# Ordered list of Binance API base URLs to try.
+# data-api.binance.vision is the official data-only endpoint that is
+# typically NOT geo-blocked, unlike api.binance.com.
+_BINANCE_URLS = [
+    os.environ.get("BINANCE_API_URL", "https://api.binance.com"),
+    "https://data-api.binance.vision",
+    "https://api1.binance.com",
+    "https://api2.binance.com",
+    "https://api3.binance.com",
+    "https://api4.binance.com",
+]
 
 _PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 DEFAULT_RAW_DIR = os.path.join(_PROJECT_ROOT, "data", "raw")
@@ -49,6 +63,10 @@ _KLINE_COLUMNS = [
 class BinanceDataLoader:
     """
     Fetch market data from the Binance public REST API.
+
+    Automatically tries multiple Binance API endpoints.  If the primary
+    endpoint returns HTTP 451 (geo-blocked), the loader falls back to
+    ``data-api.binance.vision`` and other mirrors.
 
     Parameters
     ----------
@@ -67,13 +85,28 @@ class BinanceDataLoader:
         output_dir: Optional[str] = None,
     ) -> None:
         self.symbols: list[str] = symbols or list(DEFAULT_SYMBOLS)
-        self.base_url: str = (base_url or BASE_URL).rstrip("/")
         self.output_dir: str = output_dir or DEFAULT_RAW_DIR
         self._session = requests.Session()
 
+        # Build the ordered list of base URLs to try
+        if base_url:
+            self._base_urls = [base_url.rstrip("/")]
+        else:
+            # De-duplicate while preserving order
+            seen: set[str] = set()
+            self._base_urls = []
+            for u in _BINANCE_URLS:
+                u = u.rstrip("/")
+                if u not in seen:
+                    seen.add(u)
+                    self._base_urls.append(u)
+
+        # The "active" base URL (updated after successful fallback)
+        self.base_url: str = self._base_urls[0]
+
         logger.info(
-            "BinanceDataLoader created — symbols=%s, base_url=%s",
-            self.symbols, self.base_url,
+            "BinanceDataLoader created — symbols=%s, base_url=%s (fallbacks: %d)",
+            self.symbols, self.base_url, len(self._base_urls) - 1,
         )
 
     # ══════════════════════════════════════════════════════════════════════
@@ -104,11 +137,11 @@ class BinanceDataLoader:
             Columns: open_time, open, high, low, close, volume,
             quote_volume, trades, taker_buy_base_vol, taker_buy_quote_vol.
         """
-        url = f"{self.base_url}/api/v3/klines"
+        path = "/api/v3/klines"
         params = {"symbol": symbol, "interval": interval, "limit": min(limit, 1000)}
 
         logger.info("Fetching OHLCV — %s %s (limit=%d) …", symbol, interval, params["limit"])
-        resp = self._request(url, params)
+        resp = self._request_with_fallback(path, params)
 
         df = pd.DataFrame(resp, columns=_KLINE_COLUMNS)
 
@@ -156,11 +189,11 @@ class BinanceDataLoader:
             Columns: agg_trade_id, price, qty, first_trade_id,
             last_trade_id, time, isBuyerMaker.
         """
-        url = f"{self.base_url}/api/v3/aggTrades"
+        path = "/api/v3/aggTrades"
         params = {"symbol": symbol, "limit": min(limit, 1000)}
 
         logger.info("Fetching trades — %s (limit=%d) …", symbol, params["limit"])
-        resp = self._request(url, params)
+        resp = self._request_with_fallback(path, params)
 
         df = pd.DataFrame(resp)
 
@@ -209,14 +242,15 @@ class BinanceDataLoader:
         pd.DataFrame
             Columns: side (``"bid"``/``"ask"``), price, quantity.
         """
-        url = f"{self.base_url}/api/v3/depth"
         # Binance only accepts specific limit values
         valid_limits = [5, 10, 20, 50, 100, 500, 1000, 5000]
         actual_limit = min(valid_limits, key=lambda x: abs(x - limit))
+
+        path = "/api/v3/depth"
         params = {"symbol": symbol, "limit": actual_limit}
 
         logger.info("Fetching orderbook — %s (limit=%d) …", symbol, actual_limit)
-        resp = self._request(url, params)
+        resp = self._request_with_fallback(path, params)
 
         rows = []
         for price, qty in resp.get("bids", []):
@@ -330,22 +364,77 @@ class BinanceDataLoader:
         return filepath
 
     # ══════════════════════════════════════════════════════════════════════
-    #  Internal
+    #  Internal — request with automatic endpoint fallback
     # ══════════════════════════════════════════════════════════════════════
 
-    def _request(self, url: str, params: dict) -> dict | list:
+    def _request_with_fallback(self, path: str, params: dict) -> dict | list:
         """
-        Make a GET request and return parsed JSON.
+        Try each base URL in order until one succeeds.
+
+        On HTTP 451 (geo-blocked) or connection errors, automatically
+        retries with the next base URL.  Once a working URL is found it
+        becomes the new default for subsequent calls.
+
+        Parameters
+        ----------
+        path : str
+            API path, e.g. ``"/api/v3/klines"``.
+        params : dict
+            Query parameters.
+
+        Returns
+        -------
+        dict | list
+            Parsed JSON response.
 
         Raises
         ------
         requests.HTTPError
-            If the response status code indicates an error.
+            If ALL endpoints fail.
         """
-        try:
-            resp = self._session.get(url, params=params, timeout=30)
-            resp.raise_for_status()
-            return resp.json()
-        except requests.RequestException as exc:
-            logger.error("Binance API request failed: %s — %s", url, exc)
-            raise
+        last_exc: Exception | None = None
+
+        for base_url in self._base_urls:
+            url = f"{base_url}{path}"
+            try:
+                resp = self._session.get(url, params=params, timeout=30)
+
+                # HTTP 451 = geo-blocked → try next endpoint
+                if resp.status_code == 451:
+                    logger.warning(
+                        "  Geo-blocked (HTTP 451) by %s — trying next endpoint …",
+                        base_url,
+                    )
+                    continue
+
+                resp.raise_for_status()
+
+                # Success — remember this base URL for future calls
+                if base_url != self.base_url:
+                    logger.info(
+                        "  Switched to working endpoint: %s", base_url,
+                    )
+                    self.base_url = base_url
+                    # Move this URL to the front for faster future lookups
+                    self._base_urls.remove(base_url)
+                    self._base_urls.insert(0, base_url)
+
+                return resp.json()
+
+            except requests.ConnectionError as exc:
+                logger.warning(
+                    "  Connection failed for %s — trying next endpoint … (%s)",
+                    base_url, exc,
+                )
+                last_exc = exc
+            except requests.HTTPError as exc:
+                logger.warning(
+                    "  HTTP error from %s: %s — trying next endpoint …",
+                    base_url, exc,
+                )
+                last_exc = exc
+
+        # All endpoints failed
+        msg = f"All Binance API endpoints failed for {path}. Last error: {last_exc}"
+        logger.error(msg)
+        raise requests.ConnectionError(msg)
