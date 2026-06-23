@@ -187,8 +187,8 @@ class InferenceEngine:
         Fetch latest market data from Binance for the configured symbol.
 
         Fetches:
-            - Last 60 × 1-minute OHLCV candles (covers ~60 min, enough for
-              30-period rolling windows on 1-min data)
+            - Last 500 × 1-hour OHLCV candles (~20 days, matching Phase 3
+              training data timescale and rolling-window requirements)
             - Recent trades (last 500)
             - Current orderbook snapshot
 
@@ -205,12 +205,14 @@ class InferenceEngine:
 
         data = {}
 
-        # Fetch 1-minute candles — need at least 60 for 30-period rolling windows
-        # (30 periods warm-up + 30 periods of actual data)
+        # Fetch 1-hour candles to match the training data timescale.
+        # The Phase 3 model was trained on 1h OHLCV with limit=500,
+        # so inference must use the same interval for features to
+        # fall within the scaler/PCA's expected distribution.
         data["ohlcv"] = self.loader.fetch_ohlcv(
-            self.symbol, interval="1m", limit=60
+            self.symbol, interval="1h", limit=500
         )
-        logger.info("  OHLCV: %d candles (1m interval)", len(data["ohlcv"]))
+        logger.info("  OHLCV: %d candles (1h interval)", len(data["ohlcv"]))
 
         # Fetch recent trades
         try:
