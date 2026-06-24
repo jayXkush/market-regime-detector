@@ -1,148 +1,138 @@
-# Market Regime Detection using Unsupervised Learning
+# Market Regime Detector
 
-Detect market regimes (trending, mean-reverting, volatile, calm) in cryptocurrency markets using unsupervised machine learning techniques.
+Figures out what "mood" the crypto market is in right now — trending, mean-reverting, volatile, calm, etc. — using unsupervised ML on live Binance data.
 
-## Project Overview
+The idea is simple: markets behave differently in different conditions, so if you can detect the current regime, you can pick the right strategy for it.
 
-This project applies unsupervised learning algorithms to classify cryptocurrency market conditions into distinct regimes. By identifying the current market regime, traders and systems can adapt strategies accordingly.
+## How it works
 
-**Supported Symbols:** `BTCUSDT`, `ETHUSDT`
+The whole thing is a pipeline that goes like this:
 
-## Phase Roadmap
+1. **Pull data** — Grabs OHLCV candles, recent trades, and orderbook snapshots from the Binance API for BTC and ETH.
 
-| Phase | Description | Status |
-|-------|-------------|--------|
-| 1 | Project Setup & Data Ingestion | ✅ Complete |
-| 2 | Feature Engineering | ✅ Complete |
-| 3 | Model Training (Clustering) | 🔲 Pending |
-| 4 | Inference & Visualization | 🔲 Pending |
-| 5 | Backtesting & Evaluation | 🔲 Pending |
+2. **Build features** — Computes ~36 features from the raw data: rolling volatility, ATR, realized variance, momentum signals, volume deltas, bid/ask imbalance, spread, etc. Each one is calculated across multiple lookback windows (5, 15, 30 periods).
 
-## Setup
+3. **Cluster** — Runs the features through StandardScaler → PCA (for dimensionality reduction) → clustering. Tries KMeans, GMM, and HDBSCAN, picks the best one based on silhouette scores, and assigns human-readable labels to each cluster (like "High Volatility Trending" or "Calm Mean-Reverting").
 
-### Prerequisites
-- Python 3.9+
+4. **Predict** — For a live prediction, it pulls fresh data from Binance, computes the same features, transforms them through the saved scaler/PCA, and asks the trained model which cluster this looks like. Returns the regime label + confidence score.
 
-### Installation
+5. **Serve** — A FastAPI backend wraps the inference engine so you can hit an endpoint and get the current regime as JSON. There's also a React dashboard (Vite) that shows it visually.
+
+## Getting started
 
 ```bash
-# Clone the repository
-git clone <repo-url>
-cd market-regime
+git clone https://github.com/jayXkush/market-regime-detector.git
+cd market-regime-detector
 
-# Create virtual environment
 python -m venv venv
 venv\Scripts\activate        # Windows
 # source venv/bin/activate   # macOS/Linux
 
-# Install dependencies
 pip install -r requirements.txt
 ```
 
-## Phase 1: Data Ingestion
+## Running the pipeline
 
-Fetch raw market data from the Binance public API.
-
-### Usage
+Each phase has its own script. You need to run them in order the first time (data → features → training), after that you can just run predictions.
 
 ```bash
-# Fetch all data (OHLCV + trades + orderbook) for both symbols
+# Step 1: Fetch raw data from Binance
 python main.py
 
-# Fetch specific data type
-python main.py --type ohlcv
-python main.py --type trades
-python main.py --type orderbook
-
-# Fetch for a specific symbol
-python main.py --symbol BTCUSDT
-
-# Custom OHLCV interval and limit
-python main.py --type ohlcv --interval 1h --limit 500
-```
-
-### Output
-
-Raw data is stored as CSV files in `data/raw/`:
-
-```
-data/raw/
-├── BTCUSDT_ohlcv_1h_20260618_112700.csv
-├── BTCUSDT_trades_20260618_112700.csv
-├── BTCUSDT_orderbook_20260618_112700.csv
-├── ETHUSDT_ohlcv_1h_20260618_112700.csv
-├── ETHUSDT_trades_20260618_112700.csv
-└── ETHUSDT_orderbook_20260618_112700.csv
-```
-
-## Phase 2: Feature Engineering
-
-Generate market-regime features from the raw data.
-
-### Usage
-
-```bash
-# Generate features for all symbols
+# Step 2: Generate features
 python run_features.py
 
-# Single symbol
-python run_features.py --symbol BTCUSDT
+# Step 3: Train clustering models
+python run_training.py
 
-# Show sample output
-python run_features.py --show-sample
+# Step 4: Predict current regime
+python predict.py
+python predict.py --symbol ETHUSDT
+python predict.py --json              # machine-readable output
 ```
 
-### Output
+### API server
 
-Features saved to `data/features/`:
-
-```
-data/features/
-├── features.parquet      # Primary output (compressed)
-└── features.csv          # Human-readable copy
+```bash
+python run_api.py                     # starts on port 10000
+python run_api.py --port 8080         # custom port
 ```
 
-Generator configs saved to `models/feature_config/`.
+Endpoints:
+- `GET /health` — is the server up, is the model loaded
+- `GET /regime/current?symbol=BTCUSDT` — live regime prediction
+- `GET /regime/history?limit=10` — recent predictions
 
-### Features (36 total)
+Swagger docs at `http://localhost:10000/docs`
 
-| Category | Feature | Windows |
-|----------|---------|--------|
-| Volatility | Rolling Volatility (std of log returns) | 5, 15, 30 |
-| Volatility | ATR-style Volatility (mean True Range) | 5, 15, 30 |
-| Volatility | Realized Variance (sum of squared log returns) | 5, 15, 30 |
-| Momentum | Returns (simple pct change) | 5, 15, 30 |
-| Momentum | Cumulative Log Returns | 5, 15, 30 |
-| Momentum | Price Acceleration (change in returns) | 5, 15, 30 |
-| Volume | Volume Delta (buy − sell volume) | 5, 15, 30 |
-| Volume | Volume Imbalance (buy / total ratio) | 5, 15, 30 |
-| Order Flow | Bid/Ask Imbalance | 5, 15, 30 |
-| Order Flow | Spread (high−low / close proxy) | 5, 15, 30 |
-| Order Flow | Depth Imbalance (quote volume ratio) | 5, 15, 30 |
-| Order Flow | Orderbook Spread (point-in-time) | — |
-| Order Flow | Orderbook Spread (bps) | — |
-| Order Flow | Orderbook Depth Imbalance | — |
+### Dashboard
 
-## Project Structure
+The `dashboard/` folder has a React + Vite frontend that talks to the API.
+
+```bash
+cd dashboard
+npm install
+npm run dev
+```
+
+## CLI options
+
+Most scripts accept flags to tweak behavior:
+
+```bash
+# data ingestion
+python main.py --type ohlcv --symbol BTCUSDT --interval 1h --limit 500
+
+# feature engineering
+python run_features.py --symbol BTCUSDT --show-sample
+
+# training
+python run_training.py --n-clusters 4 --pca-variance 0.90
+```
+
+## Project layout
 
 ```
-market-regime/
-├── data/
-│   └── raw/                  # Raw fetched data (CSV)
-├── notebooks/                # Jupyter notebooks for exploration
-├── models/                   # Saved model artifacts
+├── main.py                  # data ingestion CLI
+├── run_features.py          # feature engineering CLI
+├── run_training.py          # model training CLI
+├── predict.py               # inference CLI
+├── run_api.py               # FastAPI server
 ├── src/
-│   ├── data/
-│   │   └── binance_loader.py # BinanceDataLoader class
-│   ├── features/             # Feature engineering (Phase 2)
-│   ├── training/             # Model training (Phase 3)
-│   ├── inference/            # Inference pipeline (Phase 4)
-│   └── utils/
-│       └── logger.py         # Centralized logging
-├── main.py                   # CLI entry point
+│   ├── data/                # Binance data loader
+│   ├── features/            # feature generators
+│   ├── training/            # preprocessor, clustering, evaluation, labeling, viz
+│   ├── inference/           # inference engine
+│   ├── api/                 # FastAPI app + schemas
+│   └── utils/               # logger
+├── dashboard/               # React frontend (Vite)
+├── models/                  # saved model artifacts (scaler, PCA, regime_model)
+├── data/
+│   ├── raw/                 # fetched CSVs
+│   └── features/            # computed features (parquet + csv)
 ├── requirements.txt
-└── README.md
+└── render.yaml              # Render deployment config
 ```
+
+## Features computed
+
+| Category | What it measures | Windows |
+|----------|-----------------|---------|
+| Volatility | Rolling std of log returns, ATR, realized variance | 5, 15, 30 |
+| Momentum | Returns, cumulative log returns, price acceleration | 5, 15, 30 |
+| Volume | Buy/sell volume delta, volume imbalance ratio | 5, 15, 30 |
+| Order Flow | Bid/ask imbalance, spread, depth imbalance, orderbook metrics | 5, 15, 30 |
+
+## Deployment
+
+Backend is set up to deploy on Render (free tier). See `render.yaml` for the config. The dashboard can be deployed as a static site.
+
+## Tech stack
+
+- Python, pandas, numpy, scikit-learn, HDBSCAN
+- FastAPI + Uvicorn
+- React + Vite (dashboard)
+- Binance public API (no key needed)
 
 ## License
 
